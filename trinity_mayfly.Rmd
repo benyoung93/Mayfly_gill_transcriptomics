@@ -1,0 +1,747 @@
+---
+title: "mayfly_denovo"
+output: html_document
+date: "2023-06-14"
+---
+Libray prep 
+
+NEB next Ultra 2 library prep kit
+PE100
+
+```{bash renaming the raw reads to get rid of the number in the first position}
+cd /scratch/projects/transcriptomics/ben_young/mayfly_denovo_t/rr/mf_raw_reads
+
+## Read 1
+mv 24HFW1_R1.fastq.gz fw_d1_w1_R1.fastq.gz
+mv 24HFW2_R1.fastq.gz fw_d1_w2_R1.fastq.gz
+mv 24HFW3_R1.fastq.gz fw_d1_w3_R1.fastq.gz
+mv 24HSCW1_R1.fastq.gz nacl_d1_w1_R1.fastq.gz
+mv 24HSCW2_R1.fastq.gz nacl_d1_w2_R1.fastq.gz
+mv 24HSCW3_R1.fastq.gz nacl_d1_w3_R1.fastq.gz
+mv 1WFW1_R1.fastq.gz fw_d7_w1_R1.fastq.gz
+mv 1WFW2_R1.fastq.gz fw_d7_w2_R1.fastq.gz
+mv 1WFW3_R1.fastq.gz fw_d7_w3_R1.fastq.gz
+mv 1WSCW1_R1.fastq.gz nacl_d7_w1_R1.fastq.gz
+mv 1WSCW2_R1.fastq.gz nacl_d7_w2_R1.fastq.gz
+mv 1WSCW3_R1.fastq.gz nacl_d7_w3_R1.fastq.gz
+
+## Read 2
+mv 24HFW1_R2.fastq.gz fw_d1_w1_R2.fastq.gz
+mv 24HFW2_R2.fastq.gz fw_d1_w2_R2.fastq.gz
+mv 24HFW3_R2.fastq.gz fw_d1_w3_R2.fastq.gz
+mv 24HSCW1_R2.fastq.gz nacl_d1_w1_R2.fastq.gz
+mv 24HSCW2_R2.fastq.gz nacl_d1_w2_R2.fastq.gz
+mv 24HSCW3_R2.fastq.gz nacl_d1_w3_R2.fastq.gz
+mv 1WFW1_R2.fastq.gz fw_d7_w1_R2.fastq.gz
+mv 1WFW2_R2.fastq.gz fw_d7_w2_R2.fastq.gz
+mv 1WFW3_R2.fastq.gz fw_d7_w3_R2.fastq.gz
+mv 1WSCW1_R2.fastq.gz nacl_d7_w1_R2.fastq.gz
+mv 1WSCW2_R2.fastq.gz nacl_d7_w2_R2.fastq.gz
+mv 1WSCW3_R2.fastq.gz nacl_d7_w3_R2.fastq.gz
+```
+
+Make sure to have `mamba activate trimgalore_env`. 
+
+```{bash trim galore loop}
+#!/bin/bash
+#BSUB -J mf_trimgalore
+#BSUB -q general
+#BSUB -P coral_omics
+#BSUB -e /scratch/projects/omics/mayfly/trimmed/trimming.err
+#BSUB -o /scratch/projects/omics/mayfly/trimmed/trimming.out
+
+# making a list of sample names
+cd /scratch/projects/omics/mayfly/raw_reads
+MAYFLY=`ls *_R1.fastq.gz | cut -f-3 -d '_'`
+
+echo "files being trimmed (reverse and forward reads)"
+echo $MAYFLY
+
+# trimming the files
+for MAFL in $MAYFLY
+do
+echo "$MAFL"
+echo '#!/bin/bash' > /scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+echo '#BSUB -q bigmem' >>/scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+echo '#BSUB -P coral_omics' >>/scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+echo '#BSUB -J '"$MAFL"'_trim' >>/scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+echo '#BSUB -o /scratch/projects/omics/mayfly/trimmed/loop_err_out/'"$MAFL"'_o_trim.txt' >>/scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+echo '#BSUB -e /scratch/projects/omics/mayfly/trimmed/loop_err_out/'"$MAFL"'_e_trim.txt' >>/scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+echo '#BSUB -n 5' >>/scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+echo '#BSUB -R "rusage[mem=3000]"' >>/scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+
+echo 'echo "This is the mayfly sample being trimmed - '"${MAFL}"'"' >>/scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+echo 'trim_galore \
+--paired \
+--retain_unpaired \
+--phred33 \
+--output_dir /scratch/projects/omics/mayfly/trimmed \
+/scratch/projects/omics/mayfly/raw_reads/'"${MAFL}"'_R1.fastq.gz \
+/scratch/projects/omics/mayfly/raw_reads/'"${MAFL}"'_R2.fastq.gz' >>/scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+bsub </scratch/projects/omics/mayfly/trimmed/loop_scripts/"$MAFL"_trimming.sh
+done
+```
+
+```{bash fastqc of the raw}
+#!/bin/bash
+#BSUB -J raw_fastqc
+#BSUB -q general
+#BSUB -n 4
+#BSUB -P coral_omics
+#BSUB -e /scratch/projects/omics/mayfly/raw_fastqc/trimming.err
+#BSUB -o /scratch/projects/omics/mayfly/raw_fastqc/trimming.out
+
+fastqc \
+/scratch/projects/omics/mayfly/raw_reads/* \
+-o /scratch/projects/omics/mayfly/raw_fastqc
+```
+
+```{bash fastqc of the trim}
+#!/bin/bash
+#BSUB -J trim_fqc
+#BSUB -q general
+#BSUB -n 4
+#BSUB -P coral_omics
+#BSUB -e /scratch/projects/omics/mayfly/trim_fastqc/tfwc.err
+#BSUB -o /scratch/projects/omics/mayfly/trim_fastqc/tfqc.out
+
+fastqc \
+/scratch/projects/omics/mayfly/trimmed/*_val_* \
+-o /scratch/projects/omics/mayfly/trim_fastqc
+```
+
+
+## 1. De-novo transcriptome assembly of Mayfly **TRACHEAL GILLS** with `Trinity`
+
+```{bash trinity full info}
+Trinity --show_full_usage_info
+```
+
+```{bash trinity command for mayfly samples}
+#BSUB -P coral_omics
+#BSUB -q bigmem
+#BSUB -W 48:00
+#BSUB -J mf_trin
+#BSUB -n 10
+#BSUB -R "rusage[mem=20000]"
+#BSUB -e /scratch/projects/omics/mayfly/trinity_output/trinity.err
+#BSUB -o /scratch/projects/omics/mayfly/trinity_output/trinity.out
+
+cd /scratch/projects/omics/mayfly/trimmed
+ Trinity --seqType fq \
+--max_memory 200G  \
+--left fw_d1_w1_R1_val_1.fq.gz,fw_d1_w2_R1_val_1.fq.gz,fw_d1_w3_R1_val_1.fq.gz,nacl_d1_w1_R1_val_1.fq.gz,nacl_d1_w2_R1_val_1.fq.gz,nacl_d1_w3_R1_val_1.fq.gz,fw_d7_w1_R1_val_1.fq.gz,fw_d7_w2_R1_val_1.fq.gz,fw_d7_w3_R1_val_1.fq.gz,nacl_d7_w1_R1_val_1.fq.gz,nacl_d7_w2_R1_val_1.fq.gz,nacl_d7_w3_R1_val_1.fq.gz \
+--right fw_d1_w1_R2_val_2.fq.gz,fw_d1_w2_R2_val_2.fq.gz,fw_d1_w3_R2_val_2.fq.gz,nacl_d1_w1_R2_val_2.fq.gz,nacl_d1_w2_R2_val_2.fq.gz,nacl_d1_w3_R2_val_2.fq.gz,fw_d7_w1_R2_val_2.fq.gz,fw_d7_w2_R2_val_2.fq.gz,fw_d7_w3_R2_val_2.fq.gz,nacl_d7_w1_R2_val_2.fq.gz,nacl_d7_w2_R2_val_2.fq.gz,nacl_d7_w3_R2_val_2.fq.gz \
+--CPU 10 \
+--output /scratch/projects/omics/mayfly/trinity_output \
+--verbose
+```
+
+```{r}
+read.table(file = "~/Dropbox/NOAA_postdoc/projects/mayfly_transcriptomics/trinity_res/trinity_output.Trinity.fasta.gene_trans_map") %>% 
+  group_by(V1) %>% 
+  summarise(count = n()) %>% View()
+```
+
+
+### 1.2 - Quality control
+#### 1.2.A - Assesing Read Content
+
+https://github.com/trinityrnaseq/trinityrnaseq/wiki/RNA-Seq-Read-Representation-by-Trinity-Assembly 
+
+```{bash}
+cd /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/bt_index
+bowtie2-build /scratch/projects/omics/mayfly/trinity_output.Trinity.fasta \
+Trinity.fasta \
+-t 4
+```
+
+```{bash }
+#BSUB -P coral_omics
+#BSUB -q general
+#BSUB -W 48:00
+#BSUB -J bt_align
+#BSUB -n 10
+#BSUB -R "rusage[mem=20000]"
+#BSUB -e /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/bt.err
+#BSUB -o /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/bt.out
+
+# making a list of sample names
+cd /scratch/projects/omics/mayfly/raw_reads
+MAYFLY=`ls *_R1.fastq.gz | cut -f-3 -d '_'`
+
+echo "files being aligned with bowtie2"
+echo $MAYFLY
+
+for MAFL in $MAYFLY
+do
+echo "$MAFL"
+echo '#!/bin/bash' > /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+echo '#BSUB -q bigmem' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+echo '#BSUB -P coral_omics' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+echo '#BSUB -J '"$MAFL"'_align' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+echo '#BSUB -o /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_errout/'"$MAFL"'_o_align.txt' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+echo '#BSUB -e /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_errout/'"$MAFL"'_e_align.txt' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+echo '#BSUB -n 8' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+echo '#BSUB -R "rusage[mem=10000]"' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+
+echo 'cd /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/bt_index' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+echo 'echo "This is the mayfly sample being aligned - '"${MAFL}"'"' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+echo 'bowtie2 \
+-p 10 \
+-q \
+-p 10 \
+--no-unal \
+-k 20 \
+-x Trinity.fasta \
+-1 /scratch/projects/omics/mayfly/raw_reads/'"${MAFL}"'_R1.fastq.gz \
+-2 /scratch/projects/omics/mayfly/raw_reads/'"${MAFL}"'_R2.fastq.gz \
+2>/scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/'"$MAFL"'_align_stats.txt | samtools view @10 -Sb -o /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/'"$MAFL"'_bowtie2.bam' >> /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+bsub < /scratch/projects/omics/mayfly/trin_stats/read_content_bowtie/loop_scripts/"$MAFL"_align.sh
+done
+```
+
+#### 1.2.B - Blast to Swisprot DB
+
+THESE FILES BIG DO AT SOME OTHER POINT
+
+```{bash}
+mamba activate blast_env
+```
+
+```{bash}
+
+```
+
+
+#### 1.2.C - BUSCO analysis 
+
+```{bash}
+mamba activate busco_env
+```
+
+```{bash busco databases}
+busco --list-datasets
+```
+
+```{bash}
+#BSUB -P coral_omics
+#BSUB -q general
+#BSUB -W 48:00
+#BSUB -J busco
+#BSUB -n 5
+#BSUB -e /scratch/projects/omics/mayfly/trin_stats/busco/busco.err
+#BSUB -o /scratch/projects/omics/mayfly/trin_stats/busco/busco.out
+
+cd /scratch/projects/omics/mayfly/trin_stats/busco
+busco \
+-m transcriptome \
+-i /scratch/projects/omics/mayfly/trinity_output.Trinity.fasta \
+-o res \
+-l arthropoda_odb10
+```
+
+
+#### 1.2.D Detonate 
+
+```{r}
+
+```
+
+
+### 1.3 - Salmon Quantification 
+
+```{bash}
+mamba activate trinity_env
+```
+
+```{bash}
+#!/bin/bash
+#BSUB -J denovo_salmon_quant
+#BSUB -q general
+#BSUB -P coral_omics
+#BSUB -e /scratch/projects/omics/mayfly/dn_salmon_quant/salmon_a_q.err
+#BSUB -o /scratch/projects/omics/mayfly/dn_salmon_quant/salmon_a_q.out
+
+cd /scratch/projects/omics/mayfly/raw_reads
+PALMATA=`ls *_R1.fastq.gz | cut -f-3 -d '_'`
+
+echo "samples being aligned"
+echo $PALMATA
+
+## salmon index info
+salmon \
+index \
+-t /scratch/projects/omics/mayfly/trinity_output.Trinity.fasta \
+-i /scratch/projects/omics/mayfly/dn_salmon_quant/salmon_index \
+-k 31
+
+for PALPAL in $PALMATA
+do
+echo "$PALPAL"
+echo '#!/bin/bash' > /scratch/projects/omics/mayfly/dn_salmon_quant/loop_scripts/"$PALPAL"salmon.job
+echo '#BSUB -P coral_omics' >> /scratch/projects/omics/mayfly/dn_salmon_quant/loop_scripts/"$PALPAL"salmon.job
+echo '#BSUB -J '"$PALPAL"'_h_align' >> /scratch/projects/omics/mayfly/dn_salmon_quant/loop_scripts/"$PALPAL"salmon.job
+echo '#BSUB -e /scratch/projects/omics/mayfly/dn_salmon_quant/loop_errout/'"$PALPAL"'.err' >> /scratch/projects/omics/mayfly/dn_salmon_quant/loop_scripts/"$PALPAL"salmon.job
+echo '#BSUB -o /scratch/projects/omics/mayfly/dn_salmon_quant/loop_errout/'"$PALPAL"'.out' >> /scratch/projects/omics/mayfly/dn_salmon_quant/loop_scripts/"$PALPAL"salmon.job
+echo '#BSUB -q bigmem'  >> /scratch/projects/omics/mayfly/dn_salmon_quant/loop_scripts/"$PALPAL"salmon.job
+echo '#BSUB -n 2' >> /scratch/projects/omics/mayfly/dn_salmon_quant/loop_scripts/"$PALPAL"salmon.job
+
+echo 'salmon quant \
+-i /scratch/projects/omics/mayfly/dn_salmon_quant/salmon_index \
+-l A \
+-g /scratch/projects/omics/mayfly/trinity_output.Trinity.fasta.gene_trans_map \
+-1 /scratch/projects/omics/mayfly/raw_reads/'"${PALPAL}"'_R1.fastq.gz \
+-2 /scratch/projects/omics/mayfly/raw_reads/'"${PALPAL}"'_R2.fastq.gz \
+--writeUnmappedNames u \
+-o /scratch/projects/omics/mayfly/dn_salmon_quant/'"${PALPAL}"'_salmon' >> /scratch/projects/omics/mayfly/dn_salmon_quant/loop_scripts/"$PALPAL"salmon.job
+bsub < /scratch/projects/omics/mayfly/dn_salmon_quant/loop_scripts/"$PALPAL"salmon.job
+done
+```
+
+
+### 1.4 - Annotation 
+
+Using `trinotate` for annotation. 
+
+```{bash}
+mamba create -n trinotate_env -c conda-forge -c bioconda trinotate
+```
+
+- Sqlite and diamond installed. 
+- No transdecoder installed so need to do that. 
+
+```{bash}
+mamba activate trinotate_env
+mamba install -c conda-forge -c bioconda transdecoder
+```
+
+
+
+## 2. Analysis Of Quantified Samples. 
+
+```{r library loading, include = F}
+library(tidyverse)
+library(tximport)
+library(DESeq2)
+library(limma)
+library(edgeR)
+library(PCAtools)
+```
+
+```{r PCA axes modified functions loading, include = F}
+load("/Users/benjamin.d.young/Documents/bioinformatic_resources/r_saved_objects/pca_axes_saves/pca23.RData")
+load("/Users/benjamin.d.young/Documents/bioinformatic_resources/r_saved_objects/pca_axes_saves/pca34.RData")
+load("/Users/benjamin.d.young/Documents/bioinformatic_resources/r_saved_objects/pca_axes_saves/pca45.RData")
+load("/Users/benjamin.d.young/Documents/bioinformatic_resources/r_saved_objects/pca_axes_saves/pca56.RData")
+```
+
+```{r Making Salmon Vectors Names, include=FALSE}
+# Loading quantification data output from the slippery Salmon
+setwd("/Users/benjamin.d.young/Dropbox/NOAA_postdoc/projects/mayfly_transcriptomics/dn_salmon_quant/")
+PPall <- list.files(path = "/Users/benjamin.d.young/Dropbox/NOAA_postdoc/projects/mayfly_transcriptomics/dn_salmon_quant//",
+                    full.names = F,
+                    pattern = "\\_salmon$")
+
+length(PPall)
+FILESall <- file.path(PPall, "quant.sf")
+
+names(FILESall) <- PPall
+head(FILESall)
+# View(FILESall)
+all(file.exists(FILESall))
+```
+
+Reading in text to gene file
+Column 1 must equal transcript ID
+Column 2 must equal Gene ID
+
+```{r reading in transcript to gene file and formatting correctly, echo = F}
+read.table(file = "/Users/benjamin.d.young/Dropbox/NOAA_postdoc/projects/mayfly_transcriptomics/trinity_res/trinity_output.Trinity.fasta.gene_trans_map") %>% 
+  mutate(gene_ID = V1, 
+         transcript_id = V2) %>% 
+  dplyr::select(4, 3) -> tx2gene
+
+tx2gene$transcript_id %>% unique() %>% length()
+tx2gene$gene_ID %>% unique() %>% length()
+# View(tx2gene)
+```
+
+There are 918,017 transcripts in the mayfly transcriptome
+There are 509,179 genes in the mayfly transcriptome
+
+```{r Reading in Salmon Files with tyranscript to gene to quant to gene level, include=F}
+# Importing the count data using salmon quant.sf files and the text to gene file
+setwd("/Users/benjamin.d.young/Dropbox/NOAA_postdoc/projects/mayfly_transcriptomics/dn_salmon_quant/")
+txi.salmon.countall <- tximport(FILESall,
+                                type = "salmon",
+                                tx2gene = tx2gene)
+# View(txi.salmon.countall$counts)
+# txi.salmon.countall$abundance
+# txi.salmon.countall$counts
+# txi.salmon.countall$length
+# txi.salmon.countall$countsFromAbundance
+```
+
+```{r reading in the metadata}
+read.csv(file = "/Users/benjamin.d.young/Dropbox/NOAA_postdoc/projects/mayfly_transcriptomics/metadata/tfall.csv") %>% 
+  mutate(salmon_sample = paste0(ben_sample_name, "_salmon")) %>% 
+  mutate(group = paste0(.$Exposure_day, "_", .$treatment)) %>%
+  column_to_rownames(var = "salmon_sample") -> tfall
+```
+
+```{r reordering treatment so it matches all cols in salmon file}
+rownames(tfall) == colnames(txi.salmon.countall$counts)
+
+matchup <- match(colnames(txi.salmon.countall$counts), rownames(tfall))
+tfall  <- tfall[matchup, ]
+all(colnames(txi.salmon.countall$counts) == rownames(tfall))
+rownames(tfall) == colnames(txi.salmon.countall$counts)
+```
+
+Everything matched up so can proceed. 
+
+```{r Making DeSeq object, include=FALSE}
+#making the dds model to use in deseq2
+ddsall = DESeqDataSetFromTximport(txi.salmon.countall, tfall, ~ group)
+nrow(ddsall)
+ncol(ddsall)
+```
+
+```{r CPM filtering and DDS object creation}
+# cpm filtering step and seeing what original VS filtered gene number left is
+cccall <- counts(ddsall)
+keep <- rowSums(cpm(cccall)>=2) >=10
+cccall <- cccall[keep, ]
+
+nrow(ddsall)
+ncol(ddsall)
+nrow(cccall)
+ncol(cccall)
+
+ddsall <- DESeqDataSetFromMatrix(countData = cccall, colData = tfall, design = ~ group)
+ddsall
+```
+
+
+### 2.1 - PCA Analysis of Samples
+
+```{r VST, include=FALSE}
+vsdall <- vst(ddsall, blind=FALSE)
+```
+
+```{r Formating VST for PCAtools so it works the same as plotPCA function, include = F}
+PCA_tools_all <- assay(vsdall)
+rv <- rowVars(PCA_tools_all)
+select <- order(rv,
+                decreasing = TRUE)[seq_len(min(500,
+                                               length(rv)))]
+allsamps <- pca(PCA_tools_all[select, ],
+                metadata = tfall, 
+                removeVar = 0.10)
+```
+
+```{r EigenPlots, echo = F, fig.width=13, fig.height = 7}
+# Plotting of the metadata to the PC axes to see which one has strong significant relationships with axes. 
+eigencorplot(allsamps,
+             components = getComponents(allsamps, 1:10),
+    metavars = c("Exposure_day", "treatment"), 
+    col = c('darkblue', 'blue2', 'black', 'red2', 'darkred'),
+    cexCorval = 0.7,
+    colCorval = 'white',
+    fontCorval = 2,
+    posLab = 'bottomleft',
+    rotLabX = 45,
+    posColKey = 'top',
+    cexLabColKey = 1.5,
+    scale = TRUE,
+    main = 'PC1 - 11, Metadata Correlations',
+    colFrame = 'white',
+    plotRsquared = FALSE)
+
+eigencorplot(allsamps,
+             components = getComponents(allsamps, 1:11),
+    metavars = c("Exposure_day", "treatment"), 
+    col = c('white', 'cornsilk1', 'gold', 'forestgreen', 'darkgreen'),
+    cexCorval = 1.2,
+    fontCorval = 2,
+    posLab = 'all',
+    rotLabX = 45,
+    scale = TRUE,
+    main = bquote(Principal~Component~Pearson~r^2~metadata~significant~correlation),
+    plotRsquared = T,
+    corFUN = 'pearson',
+    corUSE = 'pairwise.complete.obs',
+    corMultipleTestCorrection = 'BH',
+    signifSymbols = c('****', '***', '**', '*', ''),
+    signifCutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1)
+    )
+```
+
+```{r PCA of the Samples, echo = F}
+## not transposing the CLR for the PCA
+pca_samp <- prcomp(t(PCA_tools_all)[,select])
+sample_loadings <- as.data.frame(pca_samp$x)
+summary(pca_samp)
+```
+
+```{r PC axis dataframes for plotting in ggplot, include = F}
+pca12 <-
+  plotPCA(
+    vsdall,
+    intgroup = c(
+      "Exposure_day", 
+      "treatment"
+    ),
+    returnData = TRUE
+  )
+pca23 <-
+  pcaaxes23(
+    vsdall,
+    intgroup = c(
+      "Exposure_day", 
+      "treatment"
+    ),
+    returnData = TRUE
+  )
+pca34 <-
+  pcaaxes34(
+    vsdall,
+    intgroup = c(
+      "Exposure_day", 
+      "treatment"
+    ),
+    returnData = TRUE
+  )
+pca45 <-
+  pcaaxes45(
+    vsdall,
+    intgroup = c(
+      "Exposure_day", 
+      "treatment"
+    ),
+    returnData = TRUE
+  )
+pca56 <-
+  pcaaxes56(
+    vsdall,
+    intgroup = c(
+      "Exposure_day", 
+      "treatment"
+    ),
+    returnData = TRUE
+  )
+```
+
+```{r DeSeq2 PCAs for % loadings, echo = F}
+plotPCA(vsdall, intgroup=c("Exposure_day"), returnData = F)
+pcaaxes23(vsdall, intgroup=c("Exposure_day"), returnData = F)
+pcaaxes34(vsdall, intgroup=c("Exposure_day"), returnData = F)
+pcaaxes45(vsdall, intgroup=c("Exposure_day"), returnData = F)
+pcaaxes56(vsdall, intgroup=c("Exposure_day"), returnData = F)
+```
+
+```{r DeSeq2 PCAs for % loadings, echo = F}
+plotPCA(vsdall, intgroup=c("treatment"), returnData = F)
+pcaaxes23(vsdall, intgroup=c("treatment"), returnData = F)
+pcaaxes34(vsdall, intgroup=c("treatment"), returnData = F)
+pcaaxes45(vsdall, intgroup=c("treatment"), returnData = F)
+pcaaxes56(vsdall, intgroup=c("treatment"), returnData = F)
+```
+
+```{r Principal component 1 plots, echo = F}
+ggplot(pca12, aes(PC1, PC2, color = treatment, shape = Exposure_day, fill = treatment)) +
+  geom_point(size = 3) + 
+  xlab(paste0("PC1 26% variance")) +
+  ylab(paste0("PC2 26% variance")) +
+  theme(
+    text = element_text(size = 11, family = "Arial"),
+    legend.position = "right",
+    panel.background = element_rect(fill = "transparent"),
+    axis.line = element_line(colour = "black"),
+    legend.key = element_rect(fill = "transparent"),
+    axis.text = element_text(size = 8)
+  )  +
+  theme(legend.key.size = unit(0.7, "cm")) +
+  geom_polygon()
+
+ggplot(pca23, aes(PC2, PC3, color = treatment, shape = Exposure_day, fill = treatment)) +
+  geom_point(size = 3) + 
+  xlab(paste0("PC2 26% variance")) +
+  ylab(paste0("PC3 14% variance")) +
+  theme(
+    text = element_text(size = 11, family = "Arial"),
+    legend.position = "right",
+    panel.background = element_rect(fill = "transparent"),
+    axis.line = element_line(colour = "black"),
+    legend.key = element_rect(fill = "transparent"),
+    axis.text = element_text(size = 8)
+  )  +
+  theme(legend.key.size = unit(0.7, "cm")) +
+  geom_polygon()
+
+ggplot(pca34, aes(PC3, PC4, color = treatment, shape = Exposure_day, fill = treatment)) + 
+  geom_point(size=3) +  
+  xlab(paste0("PC3 14% variance")) + 
+  ylab(paste0("PC4 8% variance")) + 
+  theme(text = element_text(size=11, family = "Arial"), 
+        legend.position = "right", 
+        panel.background = element_rect(fill = "transparent"), 
+        axis.line = element_line(colour = "black"), 
+        legend.key = element_rect(fill = "transparent"), 
+        axis.text = element_text(size = 8)) + 
+  geom_polygon()
+
+ggplot(pca45, aes(PC4, PC5, color = treatment, shape = Exposure_day, fill = treatment)) + 
+  geom_point(size=3) +  
+  xlab(paste0("PC4 8% variance")) + 
+  ylab(paste0("PC5 7% variance")) + 
+  theme(text = element_text(size=11, family = "Arial"), 
+        legend.position = "right", 
+        panel.background = element_rect(fill = "transparent"), 
+        axis.line = element_line(colour = "black"), 
+        legend.key = element_rect(fill = "transparent"), 
+        axis.text = element_text(size = 8)) + 
+  geom_polygon()
+
+ggplot(pca56, aes(PC5, PC6, color = treatment, shape = Exposure_day, fill = treatment)) + 
+  geom_point(size=3) +  
+  xlab(paste0("PC5 7% variance")) + 
+  ylab(paste0("PC6 5% variance")) + 
+  theme(text = element_text(size=11, family = "Arial"), 
+        legend.position = "right", 
+        panel.background = element_rect(fill = "transparent"), 
+        axis.line = element_line(colour = "black"), 
+        legend.key = element_rect(fill = "transparent"), 
+        axis.text = element_text(size = 8)) + 
+  geom_polygon()
+```
+
+What Andrea wants 
+1. Andrew wants DEG between 
+  - Salt 1 VS Salt 7
+  - Fresh 1 versus salt 1
+  - Fresh versus salt 7 
+  - Fresh 1 versus fresh 7
+
+```{r running deseq2, echo = F}
+ddsall <- DESeq(ddsall, 
+                test = "Wald")
+```
+
+
+```{r}
+resultsNames(ddsall)
+
+# Salt 1 VS Salt 7
+salt1_vs_salt7 <- results(ddsall, 
+                   contrast = c("group", "day_7_nacl", "day_1_nacl"), 
+                   alpha = 0.05, 
+                   test = "Wald")
+
+# Fresh 1 versus salt 1
+fresh1_vs_salt1 <- results(ddsall, 
+                   contrast = c("group", "day_1_nacl", "day_1_freshwater"), 
+                   alpha = 0.05, 
+                   test = "Wald")
+
+# Fresh versus salt 7 
+fresh1_vs_salt7 <- results(ddsall, 
+                   contrast = c("group", "day_7_nacl", "day_1_freshwater"), 
+                   alpha = 0.05, 
+                   test = "Wald")
+
+# Fresh 1 versus fresh 7
+fresh1_vs_fresh7 <- results(ddsall, 
+                   contrast = c("group", "day_7_freshwater", "day_1_freshwater"), 
+                   alpha = 0.05, 
+                   test = "Wald")
+
+summary(salt1_vs_salt7)
+summary(fresh1_vs_salt1)
+summary(fresh1_vs_salt7)
+summary(fresh1_vs_fresh7)
+```
+
+```{r}
+as.data.frame(salt1_vs_salt7) %>% 
+  dplyr::filter(padj < 0.05) %>% 
+  rownames_to_column(var = "Count_ID") %>%
+  column_to_rownames(var = "Count_ID") -> salt1_vs_salt7_Res
+View(salt1_vs_salt7_Res)
+
+as.data.frame(c_vs_d) %>% 
+  dplyr::filter(padj < 0.01) %>% 
+  rownames_to_column(var = "Count_ID") %>%
+  inner_join(annot_4_analysis %>%
+               dplyr::select(Count_ID, Gene.Annotation)) %>% 
+  mutate(DeSeq_contrast = "c_vs_d") %>%
+  column_to_rownames(var = "Count_ID") -> c_vs_d_nolfc
+
+as.data.frame(vu_vs_d) %>% 
+  dplyr::filter(padj < 0.01) %>% 
+  rownames_to_column(var = "Count_ID") %>%
+  inner_join(annot_4_analysis %>%
+               dplyr::select(Count_ID, Gene.Annotation)) %>% 
+  mutate(DeSeq_contrast = "vu_vs_d") %>% 
+  column_to_rownames(var = "Count_ID") -> vu_vs_d_nolfc
+
+write.csv(c_vs_vu_nolfc, file = "~/Dropbox/NOAA_postdoc/projects/phd_chapters/DHE/manuscript/r_saved_files/c_vs_vh_nolfc.csv")
+write.csv(c_vs_d_nolfc, file = "~/Dropbox/NOAA_postdoc/projects/phd_chapters/DHE/manuscript/r_saved_files/c_vs_d_nolfc.csv")
+write.csv(vu_vs_d_nolfc, file = "~/Dropbox/NOAA_postdoc/projects/phd_chapters/DHE/manuscript/r_saved_files/vu_vs_d_nolfc.csv")
+```
+
+```{r Rersults Data Frames LCC1 and 0.01, include = F}
+as.data.frame(c_vs_vu) %>% 
+  dplyr::filter(padj < 0.01) %>% 
+  dplyr::filter(log2FoldChange >= 1 | log2FoldChange <= -1) %>% 
+  rownames_to_column(var = "Count_ID") %>%
+  inner_join(annot_4_analysis %>%
+               dplyr::select(Count_ID, Gene.Annotation)) %>% 
+  mutate(DeSeq_contrast = "c_vs_vu") %>%
+  column_to_rownames(var = "Count_ID") -> c_vs_vu_lfc1
+
+as.data.frame(c_vs_d) %>% 
+  dplyr::filter(padj < 0.01) %>% 
+  dplyr::filter(log2FoldChange >= 1 | log2FoldChange <= -1)%>% 
+  rownames_to_column(var = "Count_ID") %>%
+  inner_join(annot_4_analysis %>%
+               dplyr::select(Count_ID, Gene.Annotation)) %>% 
+  mutate(DeSeq_contrast = "c_vs_d") %>%
+  column_to_rownames(var = "Count_ID") -> c_vs_d_lfc1
+
+as.data.frame(vu_vs_d) %>% 
+  dplyr::filter(padj < 0.01) %>% 
+  dplyr::filter(log2FoldChange >= 1 | log2FoldChange <= -1)%>% 
+  rownames_to_column(var = "Count_ID") %>%
+  inner_join(annot_4_analysis %>%
+               dplyr::select(Count_ID, Gene.Annotation)) %>% 
+  mutate(DeSeq_contrast = "vu_vs_d") %>% 
+  column_to_rownames(var = "Count_ID") -> vu_vs_d_lfc1
+
+# write.csv(c_vs_vu_lfc1, file = "~/Dropbox/NOAA_postdoc/projects/phd_chapters/DHE/manuscript/r_saved_files/c_vs_vh_lfc1.csv")
+# write.csv(c_vs_d_lfc1, file = "~/Dropbox/NOAA_postdoc/projects/phd_chapters/DHE/manuscript/r_saved_files/c_vs_d_lfc1.csv")
+# write.csv(vu_vs_d_lfc1, file = "~/Dropbox/NOAA_postdoc/projects/phd_chapters/DHE/manuscript/r_saved_files/vu_vs_d_lfc1.csv")
+```
+
+```{r}
+c_vs_vu_lfc1 %>% nrow()
+c_vs_vu_lfc1 %>% 
+  dplyr::filter(log2FoldChange >= 1) %>% nrow()
+c_vs_vu_lfc1 %>% 
+  dplyr::filter(log2FoldChange <= -1) %>% nrow()
+
+c_vs_d_lfc1 %>% nrow()
+c_vs_d_lfc1 %>% 
+  dplyr::filter(log2FoldChange >= 1) %>% nrow()
+c_vs_d_lfc1 %>% 
+  dplyr::filter(log2FoldChange <= -1) %>% nrow()
+
+vu_vs_d_lfc1 %>% nrow()
+vu_vs_d_lfc1 %>% 
+  dplyr::filter(log2FoldChange >= 1) %>% nrow()
+vu_vs_d_lfc1 %>% 
+  dplyr::filter(log2FoldChange <= -1) %>% nrow()
+```
+
+  
